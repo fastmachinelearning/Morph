@@ -84,6 +84,35 @@ def sample_ConvAttn(trial, prefix):
 
     return widths, acts, norms
 
+def sample_MLP(trial, in_dim, out_dim, prefix, num_layers=3):
+    width_space = (8, 16, 32, 64, 128)
+    act_space = (nn.ReLU(), nn.LeakyReLU(negative_slope=2**-7))
+    norm_space = (None, 'batch', 'layer')
+
+    widths = [in_dim] + [width_space[trial.suggest_int(prefix + '_width_' + str(i), 0, len(width_space) - 1)] for i in range(num_layers-1)] + [out_dim]
+    acts = [act_space[trial.suggest_categorical(prefix + '_acts_' + str(i), (0,1))] for i in range(num_layers-1)] + [None]
+    norms = [trial.suggest_categorical(prefix + '_norms_' + str(i), norm_space) for i in range(num_layers)]
+
+    return widths, acts, norms
+
+def sample_ConvBlock(trial, in_channels, prefix, num_layers = 2):
+    #Search space to sample from
+    channel_space = []
+    kernel_space = [1,3,5]
+    act_space = [nn.ReLU(), nn.LeakyReLU(), nn.GeLU(), lambda x: x]
+    norm_space = [None, 'layer', 'batch']
+
+    channels = [in_channels] + [channel_space[ trial.suggest_int(prefix + '_channels_' + str(i), 0, len(channel_space) - 1) ]
+                                    for i in range(num_layers)] #Picks an integer an index of channel_space for easier sampling
+    kernels = [trial.suggest_categorical(prefix + '_kernels_' + str(i), kernel_space) for i in range(num_layers)]
+    norms = [trial.suggest_categorical(prefix + '_norms_' + str(i), norm_space) for i in range(num_layers)]
+    acts = [trial.suggest_categorical(prefix + '_acts_' + str(i), act_space) for i in range(num_layers)]
+
+    return channels, kernels, acts, norms
+
+
+
+
 class CandidateArchitecture(torch.nn.Module):
     def __init__(self, Blocks, MLP, hidden_channels, input_channels = 1):
         super().__init__()

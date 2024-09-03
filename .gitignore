@@ -10,3 +10,6 @@ data/normalized_data3-20240430T145906Z-001.zip
 plots/Pareto_BOPs/
 *.pyc
 .DS_Store
+repopack-output.txt
+Saving_BOPS3.ipynb
+global_search_results/

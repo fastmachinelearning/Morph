@@ -13,95 +13,6 @@ bit_width = 32
 
 aggregator = lambda x: torch.mean(x,dim=2)
 
-phi = QAT_ConvPhi(
-    widths=[3,32,32,32],
-    acts=[nn.ReLU(), nn.ReLU(), nn.ReLU()],
-    norms=[None, None, None],
-    bit_width = bit_width
-    )
-
-rho = QAT_Rho(
-    widths=[32,16,5],
-    acts=[nn.ReLU(), None],
-    norms=[None, None],
-    bit_width = bit_width
-    )
-
-deepsets_model = DeepSetsArchitecture(phi, rho, aggregator)
-
-large_phi = QAT_ConvPhi(
-    widths=[3,32,32], 
-    acts=[nn.ReLU(), nn.ReLU()], 
-    norms=['batch', 'batch'],
-    bit_width = bit_width
-    )
-
-large_rho = QAT_Rho(
-    widths=[32,32,64,5], 
-    acts=[nn.ReLU(),nn.ReLU(),nn.LeakyReLU(negative_slope=0.01)], 
-    norms=['batch', None, 'batch'],
-    bit_width = bit_width
-    )
-
-large_model = DeepSetsArchitecture(large_phi, large_rho, aggregator)
-
-medium_phi = QAT_ConvPhi(
-    widths=[3,32,16], 
-    acts=[nn.ReLU(),nn.ReLU()], 
-    norms=['batch', 'batch'],
-    bit_width = bit_width
-    )
-
-medium_rho = QAT_Rho(
-    widths=[16,64,8,32,5], 
-    acts=[nn.ReLU(),nn.LeakyReLU(negative_slope=0.01),nn.ReLU(),nn.ReLU()], 
-    norms=['batch','batch','batch','batch'],
-    bit_width = bit_width
-    )
-
-medium_model = DeepSetsArchitecture(medium_phi, medium_rho, aggregator)
-
-small_phi = QAT_ConvPhi(
-    widths=[3,8,8], 
-    acts=[nn.LeakyReLU(negative_slope=0.01),nn.ReLU()], 
-    norms=['batch', None],
-    bit_width = bit_width
-    )
-
-small_rho = QAT_Rho(
-    widths=[8,16,16,5], 
-    acts=[nn.LeakyReLU(negative_slope=0.01),nn.ReLU(),nn.LeakyReLU(negative_slope=0.01)], 
-    norms=['batch','batch',None],
-    bit_width = bit_width
-    )
-
-small_model = DeepSetsArchitecture(small_phi, small_rho, aggregator)
-
-tiny_phi = QAT_ConvPhi(
-    widths=[3,16], 
-    acts=[nn.ReLU()], 
-    norms=['batch'],
-    bit_width = bit_width
-    )
-
-tiny_rho = QAT_Rho(
-    widths=[16,8,8,4,5], 
-    acts=[nn.ReLU(),None,nn.ReLU(),nn.ReLU()], 
-    norms=['batch',None,None,'batch'],
-    bit_width = bit_width
-    )
-
-tiny_model = DeepSetsArchitecture(tiny_phi, tiny_rho, aggregator)
-
-adjusted_tiny_rho = QAT_Rho(
-    widths=[16,8,4,5], 
-    acts=[nn.ReLU(),nn.ReLU(),nn.ReLU()], 
-    norms=['batch',None,'batch'],
-    bit_width = bit_width
-    )
-
-adjusted_tiny_model = DeepSetsArchitecture(tiny_phi, adjusted_tiny_rho, aggregator)
-
 # def get_parameters_to_prune(model, bias = False):
 #     parameters_to_prune = []
 #     for name, module in model.named_modules():
@@ -148,55 +59,56 @@ def get_parameters_to_prune(model):
 def create_model(model_size, bit_width):
     # Function to create models based on size and bit width
     if model_size == 'large':
+        # phi = QAT_ConvPhi(
         phi = QAT_ConvPhi(
-            widths=[3,32,32], 
-            acts=[nn.ReLU(), nn.ReLU()], 
+            widths=[3,64,16], 
+            acts=[nn.ReLU(), None], 
             norms=['batch', 'batch'],
             bit_width=bit_width
         )
         rho = QAT_Rho(
-            widths=[32,32,64,5], 
-            acts=[nn.ReLU(),nn.ReLU(),nn.LeakyReLU(negative_slope=0.01)], 
-            norms=['batch', None, 'batch'],
+            widths=[16, 128, 16, 64, 5], 
+            acts=[nn.ReLU(),nn.LeakyReLU(negative_slope=1/128),nn.ReLU(), None], 
+            norms=['batch', 'batch', 'batch', 'batch'],
             bit_width=bit_width
         )
     elif model_size == 'medium':
         phi = QAT_ConvPhi(
-            widths=[3,32,16], 
-            acts=[nn.ReLU(),nn.ReLU()], 
-            norms=['batch', 'batch'],
+            widths=[3, 32,8], 
+            acts=[nn.ReLU(), None], 
+            norms=[None, None],
             bit_width=bit_width
         )
         rho = QAT_Rho(
-            widths=[16,64,8,32,5], 
-            acts=[nn.ReLU(),nn.LeakyReLU(negative_slope=0.01),nn.ReLU(),nn.ReLU()], 
-            norms=['batch','batch','batch','batch'],
+            widths=[8, 32, 16, 64, 5], 
+            acts=[nn.LeakyReLU(negative_slope=1/128),nn.LeakyReLU(negative_slope=1/128),nn.LeakyReLU(negative_slope=1/128),None], 
+            norms=['batch',None, 'batch', None],
             bit_width=bit_width
         )
     elif model_size == 'small':
         phi = QAT_ConvPhi(
-            widths=[3,8,8], 
-            acts=[nn.LeakyReLU(negative_slope=0.01),nn.ReLU()], 
-            norms=['batch', None],
+            widths=[3, 16, 8], 
+            acts=[nn.LeakyReLU(negative_slope=1/128), None], 
+            norms=[None, 'batch'],
             bit_width=bit_width
         )
         rho = QAT_Rho(
-            widths=[8,16,16,5], 
-            acts=[nn.LeakyReLU(negative_slope=0.01),nn.ReLU(),nn.LeakyReLU(negative_slope=0.01)], 
-            norms=['batch','batch',None],
+            widths=[8, 8, 16, 16, 5], 
+            acts=[nn.ReLU(),nn.LeakyReLU(negative_slope=1/128), nn.LeakyReLU(negative_slope=1/128), None], 
+            norms=['batch',None, None, 'batch'],
             bit_width=bit_width
         )
     elif model_size == 'tiny':
         phi = QAT_ConvPhi(
-            widths=[3,16], 
-            acts=[nn.ReLU()], 
-            norms=['batch'],
+            widths=[3,8,8], 
+            acts=[nn.ReLU(), None], 
+            norms=['batch', None],
             bit_width=bit_width
         )
         rho = QAT_Rho(
-            widths=[16,8,8,4,5], 
-            acts=[nn.ReLU(),None,nn.ReLU(),nn.ReLU()], 
-            norms=['batch',None,None,'batch'],
+            widths=[8, 32, 5], 
+            acts=[nn.ReLU(),None], 
+            norms=[ None, None],
             bit_width=bit_width
         )
     else:
@@ -222,7 +134,7 @@ if __name__ == "__main__":
 
     # Set up data loaders
     batch_size = 4096
-    num_workers = 8
+    num_workers = 4
     train_loader, val_loader, test_loader = DeepsetsDataset.setup_data_loaders(
         'jet_images_c8_minpt2_ptetaphi_robust_fast',
         batch_size,
@@ -238,13 +150,13 @@ if __name__ == "__main__":
         # Create model for current bit width
         model = create_model(model_size, bit_width)
 
+
         # Initial pruning
         parameters_to_prune = get_parameters_to_prune(model)
         prune.global_unstructured(parameters_to_prune, pruning_method=prune.L1Unstructured, amount=0)
 
         # Create a unique output file for this model and bit width
-        #compress3 is the more full results of compression september 17
-        output_file = f"./compression/deepsets_Compress3_{model_size}_{bit_width}bit.txt"
+        output_file = f"./compression/deepsets_Compress_sep18_{model_size}_{bit_width}bit.txt"
 
         # Pruning loop
         for prune_iter in range(20):

@@ -29,15 +29,6 @@ Saves all information in global_search.txt
 #     return widths, acts, norms
 
 
-def get_conv1d_bops(layer, input_shape, bit_width=32):
-    output_shape = (input_shape[0], layer.out_channels, input_shape[2] - layer.kernel_size[0] + 1)
-    input_numel = torch.prod(torch.tensor(input_shape[1:]))
-    output_numel = torch.prod(torch.tensor(output_shape[1:]))
-    
-    sparsity = get_sparsity(layer.weight.data)
-    return output_numel * input_numel * layer.kernel_size[0] * ((1-sparsity) * bit_width**2 + 2*bit_width + math.log2(input_numel * layer.kernel_size[0]))
-
-
 
 def BraggNN_objective(trial):
     #Build Model
@@ -121,16 +112,10 @@ def Deepsets_objective(trial):
     phi_len = trial.suggest_int('phi_len', 1, 4)
     widths, acts, norms = sample_MLP(trial, in_dim, bottleneck_dim, 'phi_MLP', num_layers=phi_len)
     # phi = Phi(widths, acts, norms) #QAT_Phi(widths, acts, norms)
-    # phi = ConvPhi(widths, acts, norms)
     phi = ConvPhi(widths, acts, norms)
     # bops +=  get_MLP_bops(phi, bit_width=8)*8
     phi_input_shape = (batch_size, in_dim, 8)  # 8 is the sequence length from your input
     bops += get_Conv_bops(phi, input_shape=phi_input_shape, bit_width=8)
-    print("Conv bp: ",get_Conv_bops(phi, input_shape=phi_input_shape, bit_width=8))
-    # for i, layer in enumerate(phi.layers):
-    #     if isinstance(layer, nn.Conv1d):
-    #         bops += get_conv1d_bops(layer, phi_input_shape, bit_width=8)
-    #         phi_input_shape = (phi_input_shape[0], layer.out_channels, phi_input_shape[2] - layer.kernel_size[0] + 1)
 
 
     #Initialize Rho (second MLP)
@@ -155,20 +140,14 @@ def Deepsets_objective(trial):
     print('BOPs:', bops)
     print('Trial ', trial.number,' begins evaluation...')
     accuracy, inference_time, validation_loss, param_count = evaluate_Deepsets(model, train_loader, val_loader, device)
-    with open(f"./global_search_results_central2/global_search_{model_name}.txt", "a") as file:
+    with open(f"./global_search_results3/global_search_{model_name}.txt", "a") as file:
         file.write(f"Trial {trial.number}, Accuracy: {accuracy}, BOPs: {bops}, Inference time: {inference_time}, Validation Loss: {validation_loss}, Param Count: {param_count}, Hyperparams: {trial.params}\n")
     
     return accuracy, bops
 
 if __name__ == "__main__":
 
-    if len(sys.argv) != 2:
-        print("Usage: python global_search.py <model_index>")
-        sys.exit(1)
-
-    print("All command-line arguments:", sys.argv)
-    model_index = int(sys.argv[1])
-    print("model index: ", model_index)
+    
 
     model_configs = [
         {'name': 'Deepsets', 'params': {'bottleneck_dim': 5, 'aggregator_type': 0, 'phi_len': 3, 'phi_MLP_width_0': 3, 'phi_MLP_width_1': 3, 'phi_MLP_acts_0': 0, 'phi_MLP_acts_1': 0, 'phi_MLP_acts_2': 0, 'phi_MLP_norms_0': None, 'phi_MLP_norms_1': None, 'phi_MLP_norms_2': None, 'rho_len': 2, 'rho_MLP_width_0': 2, 'rho_MLP_acts_0': 0, 'rho_MLP_acts_1': 1, 'rho_MLP_norms_0': None, 'rho_MLP_norms_1': None}},
@@ -178,56 +157,39 @@ if __name__ == "__main__":
         {'name': 'tiny', 'params': {'bottleneck_dim': 4, 'aggregator_type': 0, 'phi_len': 1, 'phi_MLP_acts_0': 0, 'phi_MLP_norms_0': 'batch', 'rho_len': 4, 'rho_MLP_width_0': 1, 'rho_MLP_width_1': 1, 'rho_MLP_width_2': 0, 'rho_MLP_acts_0': 0, 'rho_MLP_acts_1': 1, 'rho_MLP_acts_2': 0, 'rho_MLP_acts_3': 0, 'rho_MLP_norms_0': 'batch', 'rho_MLP_norms_1': None, 'rho_MLP_norms_2': None, 'rho_MLP_norms_3': 'batch'}}
     ]
 
-    if model_index < 0 or model_index >= len(model_configs):
-        print(f"Invalid model index. Please choose a number between 0 and {len(model_configs) - 1}")
-        sys.exit(1)
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    selected_model = model_configs[model_index]
-    model_name = selected_model['name']
-    model_params = selected_model['params']
-
-    print(f"Processing {model_name} model with index {model_index}")
-
-
-    
-    # device = torch.device('cuda:0') #TODO: Change to fit anyones device
-    if torch.cuda.is_available():
-        device = torch.device('cuda:0')
-    else:
-        device = torch.device('cpu')
-
-
-    batch_size = 4096 #1024
-    # batch_size = 1024
+    batch_size = 4096
     num_workers = 4
 
-    #train_loader, val_loader, test_loader = BraggNNDataset.setup_data_loaders(batch_size, IMG_SIZE = 11, aug=1, num_workers=4, pin_memory=False, prefetch_factor=2)
     train_loader, val_loader, test_loader = DeepsetsDataset.setup_data_loaders('jet_images_c8_minpt2_ptetaphi_robust_fast', batch_size, num_workers, prefetch_factor=True, pin_memory=True)
     print('Loaded Dataset...')
 
-
-    #printing input shape
     for batch in train_loader:
         inputs, targets = batch
         print("input shape: ", inputs.shape)
         break
 
-    study = optuna.create_study(sampler=optuna.samplers.NSGAIISampler(population_size=20), directions=['maximize', 'minimize'])
+    #remove the first model from the list
+    model_configs = model_configs[1:]
 
-    # Enqueue the selected model
-    study.enqueue_trial(model_params)
+    for model_index, model_config in enumerate(model_configs):
+        model_name = model_config['name']
+        model_params = model_config['params']
 
-    """
-    study = optuna.create_study(sampler=optuna.samplers.NSGAIISampler(population_size = 20), directions=['minimize', 'minimize']) #min mean_distance and inference time
-    
-    #Queue OpenHLS & BraggNN architectures to show the search strategy what we want to beat.
-    study.enqueue_trial(OpenHLS_params)
-    study.enqueue_trial(BraggNN_params)
-    study.enqueue_trial(Example1_params)
-    study.enqueue_trial(Example2_params)
-    study.enqueue_trial(Example3_params)
-    study.optimize(BraggNN_objective, n_trials=1000)
-    """
+        print("----------------------------------")
+        print(f"Processing {model_name} model (index: {model_index})")
 
+        study = optuna.create_study(sampler=optuna.samplers.NSGAIISampler(population_size=20), directions=['maximize', 'minimize'])
 
-    study.optimize(Deepsets_objective, n_trials=500)
+        # Enqueue the selected model
+        study.enqueue_trial(model_params)
+
+        # Run 100 trials for the selected model
+        study.optimize(Deepsets_objective, n_trials=100)
+
+        
+        
+        print(f"Completed 100 trials for {model_name} model")
+
+    print("All model types processed.")

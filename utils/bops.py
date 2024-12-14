@@ -37,6 +37,8 @@ def get_linear_bops(layer, bit_width=32):
     sparsity = get_sparsity(layer.weight.data)
     return layer.out_features * layer.in_features * ( (1-sparsity) * bit_width**2 + 2*bit_width + math.log2(layer.in_features))
 
+
+
 def get_conv2d_bops(layer, input_shape, bit_width=32):
     output_spatial_dim = input_shape[-1] if layer.kernel_size == 1 else input_shape[-1] - 2
     output_shape = (input_shape[0], layer.out_channels, output_spatial_dim, output_spatial_dim)
@@ -47,6 +49,15 @@ def get_conv2d_bops(layer, input_shape, bit_width=32):
     sparsity = get_sparsity(layer.weight.data)
     return output_numel * input_numel * layer.kernel_size[0]**2 * ((1-sparsity) * bit_width**2 + 2*bit_width + math.log2(input_numel * layer.kernel_size[0]**2))
 
+def get_conv1d_bops(layer, input_shape, bit_width=32):
+    output_shape = (input_shape[0], layer.out_channels, input_shape[2] - layer.kernel_size[0] + 1)
+    input_numel = torch.prod(torch.tensor(input_shape[1:]))
+    output_numel = torch.prod(torch.tensor(output_shape[1:]))
+    
+    sparsity = get_sparsity(layer.weight.data)
+    return output_numel * input_numel * layer.kernel_size[0] * ((1-sparsity) * bit_width**2 + 2*bit_width + math.log2(input_numel * layer.kernel_size[0]))
+
+
 def get_Conv_bops(block, input_shape, bit_width=32):
     bops = 0
     for i, layer in enumerate(block.layers):
@@ -54,9 +65,18 @@ def get_Conv_bops(block, input_shape, bit_width=32):
             sparsity = get_sparsity(layer.weight.data)
             bops += get_conv2d_bops(layer, input_shape, bit_width)
             
+            
             #Update input_shape for future Conv2D layers
             output_spatial_dim = input_shape[-1] if layer.kernel_size == 1 else input_shape[-1] - 2
             input_shape = (input_shape[0], layer.out_channels, output_spatial_dim, output_spatial_dim)
+        
+        if isinstance(layer, nn.Conv1d):
+            sparsity = get_sparsity(layer.weight.data)
+            bops += get_conv1d_bops(layer, input_shape, bit_width)
+            
+            #Update input_shape for future Conv1D layers
+            output_spatial_dim = input_shape[-1] if layer.kernel_size == 1 else input_shape[-1] - 2
+            input_shape = (input_shape[0], layer.out_channels, output_spatial_dim)
 
     return bops
 

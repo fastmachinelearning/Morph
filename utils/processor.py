@@ -54,6 +54,8 @@ def evaluate_Deepsets(model, train_loader, val_loader, device, num_epochs = 80, 
 def train(model, optimizer, scheduler, criterion, train_loader, valid_loader, device, num_epochs, patience=5):
     curr_patience = patience
     previous_epoch_loss = float('inf')
+
+    # num_epochs = 2
     
     for epoch in range(num_epochs):
         # Training phase
